@@ -3,25 +3,24 @@
 
 I use the wonderful [`exist.io`](https://exist.io/) service to generate a variety of personal dashboards.
 
+This is a very small python script that will pull the experience points for a given duolingo user and, 
+if the EXP points for a given day is over a user-defined threshold, apply a custom attribute to an exist.io account.
+
+The idea is to have my duolingo sessions automatically reflected in my exist.io account so I don't 
+have to do it (read: forget to do it) daily.
+
 Duolingo has [no API](https://forum.duolingo.com/comment/2418289/Public-API-for-DuoLingo), but there is a 
 [3rd party service](https://duome.eu/) that seems to provide the info needed to do this.
 
 
-This is a very small python script that will pull the experience points for a given duolingo user and, 
-if the EXP points for a given day is over a user-defined threshold, apply a custom attribute to an exist.io account.
-
-The idea is to have my duolingo sessions automatically reflected in my exist.io account.   
-
-
 ## Setup
 
-It's a  small python script with some pretty standard libraries. A
-[virtual environment](https://docs.python.org/3/library/venv.html) is suggested, but not required.
+It's a small python script with some pretty standard libraries. 
+A [virtual environment](https://docs.python.org/3/library/venv.html) is suggested, but not required.
 
 Developed on a mac, using a very recent version of python 3. Other platforms will probably work. Older versions of 
 python3 will probably also work. Your results may differ, of course! Pull requests are welcome, though :)
  
-
 Before setting up the script, you'll need:
 
 - an exist.io API token. See [here](http://developer.exist.io/#authorisation-flow) for instructions on how to get one.
