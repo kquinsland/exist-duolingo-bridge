@@ -295,7 +295,7 @@ def parse_args():
 
     # Root argparse
     parser = argparse.ArgumentParser(
-        description = 'Executes actions against a Unifi Controller',
+        description = 'Syncs duolingo to Exist.io',
         epilog = 'Thats how you get ants!',
         allow_abbrev=False)
 
