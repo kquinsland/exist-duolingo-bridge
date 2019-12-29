@@ -1,0 +1,22 @@
+[duolingo]
+# The URL to scrape for XP; supports python string format  variables
+url=https://duome.eu/{username}
+
+# The user name to scrape XP data
+username=BobbyTables42
+
+# What timezone is the user in? Used to ensure that the script uses the same definition of 'day' that the user will have!
+# See: from pytz import all_timezones
+# See: https://stackoverflow.com/questions/13866926/is-there-a-list-of-pytz-timezones
+timezone=America/Louisville
+
+# The minimum XP required in a given day before counting practice as "done" for the day
+min_xp=10
+
+[exist.io]
+# The auth token to use; CAREFUL, can be used to read all exist data + add tags, so protect it!
+api_token=<some_hash_looking_thing_here>
+
+# The validated tag to append to each day where duo_xp  > min_xp
+# See: http://developer.exist.io/#validating-tags
+tag=practice_spanish

@@ -1,0 +1,12 @@
+##
+# An improved version of pprint
+# See: https://pypi.org/project/prettyprinter/
+prettyprinter
+
+# Web scrape
+requests
+# Parse the scrape
+bs4
+
+# Timezone shift/localization
+pytz
