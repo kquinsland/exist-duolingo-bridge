@@ -1,0 +1,7 @@
+##
+# Don't need the PyCharm stuff
+.idea/*
+# Nor do we need venv
+venv/*
+# Nor do we need the sensitive config.ini
+config.ini
