@@ -48,6 +48,21 @@ log_levels = {
 logging.basicConfig(format=LOG_FORMAT, level=log_levels['i'])
 log = logging.getLogger(__name__)
 
+def get_params_from_ssm(param_name):
+    import boto3
+    client = boto3.client('ssm')
+    try:
+        ssm_param_response = client.get_parameter(
+            Name=param_name,
+            WithDecryption=True
+        )
+        
+        raw_params = ssm_param_response['Parameter']['Value']
+        return json.loads(raw_params) or {}
+    except Exception as e:
+        print(e)
+        raise e
+    
 
 def _parse_cfg(cfg_file=''):
     """
@@ -65,7 +80,7 @@ def _parse_cfg(cfg_file=''):
     cfg = configparser.ConfigParser()
     cfg.read(cfg_file)
     return cfg
-
+    
 
 def fetch_page(url='', gmt_delta=''):
     """
@@ -191,7 +206,15 @@ def do_needful(args):
     log.debug("Alive!")
 
     # Open the config file
-    cfg = _parse_cfg(args.config_file)
+    if 'ssm_parameter_name' in args and args['ssm_parameter_name']:
+        cfg = get_params_from_ssm(args['ssm_parameter_name'])
+    elif 'config_file' in args and args['config_file']:
+        cfg = _parse_cfg(args['config_file'])
+    else:
+        _e = "No Config file or ssm parameter name provided!"
+        log.fatal(_e)
+        raise Exception(_e)
+
 
     # Get the duo section from  cfg parser
     duo_cfg = dict(cfg['duolingo'].items())
@@ -241,6 +264,7 @@ def do_needful(args):
     # At this point, we should have an arrayof objexts.
     log.debug("Applying tag to {} days".format(len(tags)))
     do_exist_tag_update(tags, api_token=exist_cfg['api_token'])
+    return days
 
 
 def _do_exist_tag_update_payload(when, tag=''):
@@ -327,20 +351,33 @@ def parse_args():
 
     return parser.parse_args()
 
+def perform(args):
+    # Adjust log level
+    log.info("Alive. Adjusting log level to {}..".format(args['log_level']))
+    log.setLevel(log_levels[args['log_level']])
+
+    # Pass the args obj off to the bulk of the code
+    return do_needful(args=args)
+
+def deploy_doulingo_activity_to_exist_io(message, _context):
+    message = {
+        'config_file': None,
+        'log_level': 'i',
+        'ssm_parameter_name': None,
+        **message
+    }
+    print(message)
+    return {
+        "statusCode": 200,
+        "body": perform(message)
+    }
 
 if __name__ == "__main__":
-
-
     # Let the world know we're alive and then begin  parsing args
     log.debug("Alive! Parsing args...")
     args = parse_args()
-
-    # Adjust log level
-    log.info("Alive. Adjusting log level to {}..".format(args.log_level))
-    log.setLevel(log_levels[args.log_level])
-
-    # Pass the args obj off to the bulk of the code
-    do_needful(args=args)
+    
+    perform(vars(args))
 
     # Assuming that nothing bklew up, exit cleanly :)
     log.info("Exiting...")

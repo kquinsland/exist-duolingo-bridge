@@ -6,3 +6,5 @@ venv/*
 .pyenv/*
 # Nor do we need the sensitive config.ini
 config.ini
+
+dist
