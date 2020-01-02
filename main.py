@@ -115,14 +115,15 @@ def fetch_page(url='', gmt_delta=''):
     s = requests.session()
 
     # First, ask for *a* session cookie...
-    fake = s.get('https://duome.eu/kquinsland', headers=initial_headers)
+    fake = s.get(url, headers=initial_headers)
 
     # Now that we have a session cookie, set the timezone associated w/ our session...
     tz_resp = s.get('https://duome.eu/tz.php', params=tz_params)
     tz_resp.raise_for_status()
 
     # Now, theoretically, we have a session cookie that has been associated w/ a timezone
-    response = s.get('https://duome.eu/kquinsland', headers=initial_headers)
+    response = s.get(url, headers=initial_headers)
+
     # If we don't get a 200, make noise
     response.raise_for_status()
 
@@ -225,18 +226,24 @@ def do_needful(args):
     tags = []
 
     # Now, go through each session to figure out if the user earned enough XP
+    days = {}
     for record in sessions:
         _x = sessions[record]
-        if _x >= min_xp:
-            log.info("on {}, you managed to practice enough!".format(record))
-            tags.append(_do_exist_tag_update_payload(tag=exist_cfg['tag'],  when=record))
+        _day = record.strftime('%Y-%m-%d')
+        days.setdefault(_day, 0)
+        days[_day] += _x
+    
+    for day, xp in days.items():
+        if xp >= min_xp:
+            log.info("on {}, you managed to practice enough ({} XPs)!".format(day, xp))
+            tags.append(_do_exist_tag_update_payload(day, tag=exist_cfg['tag']))
 
     # At this point, we should have an arrayof objexts.
     log.debug("Applying tag to {} days".format(len(tags)))
     do_exist_tag_update(tags, api_token=exist_cfg['api_token'])
 
 
-def _do_exist_tag_update_payload(tag='', when=datetime.datetime):
+def _do_exist_tag_update_payload(when, tag=''):
     """
     generates an exist.io API payload to apply a tag to a date
     :param tag:
@@ -251,7 +258,7 @@ def _do_exist_tag_update_payload(tag='', when=datetime.datetime):
 
     return {
         "value": tag,
-        "date": when.strftime('%Y-%m-%d')
+        "date": when
     }
 
 
