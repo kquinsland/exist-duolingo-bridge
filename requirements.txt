@@ -10,6 +10,3 @@ bs4
 
 # Timezone shift/localization
 pytz
-
-# AWS driver for getting ssm paramters
-boto3
