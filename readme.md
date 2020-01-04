@@ -87,6 +87,48 @@ easy to  get working with your favorite schedule tool.
 **Note**: The exist.io API token will expire in 1 year. I strongly suggest making a reminder or calendar entry so you
 renew the API token before it stops working!
 
+## Deployment on AWS Lambda
+
+After succesfully running locally, you can deploy the function as an AWS Lambda.
+(Will hopefully add a package & deploy script to facilitate this process in the future)
+
+You'll need:
+1. Have an SSM secure parameter with the same structure of the config.ini (converted to json). Should look like this:
+
+```
+{
+    "duolingo": {
+        "url": "https://duome.eu/{username}",
+        "username": "some_username",
+        "timezone": "Asia/Jerusalem",
+        "min_xp": "30"
+    },
+    "exist.io": {
+        "api_token": "asdfghjk34567890xcvbnm",
+        "tag": "your_tag"
+    }
+}
+```
+
+2. Zip your pip packages (from your python env folder) together with main.py (all in the same folder level), e.g.:
+
+```
+package.zip:
+  main.py
+  some_package_folder/
+  another_package_folder/
+```
+
+3. Deploy the Lambda to your AWS account. It can have 128MB, timeout of ~15 seconds. You need to add an IAM Policy to the Execution Role to enable access to the ssm parameter. Also create a Test event with overrides to the command line arguments + provide a `ssm_parameter_name`. Should look like:
+
+```
+{
+  "ssm_parameter_name": "your-ssm-param-name",
+  "log_level": "d"
+}
+```
+
+4. Add a Cloudwatch Rule to execute the function regularly with a schedule (Preferably once a day or 5 days). Put similar json like you put in the Test Event (in step 3) as the input.
 
 ## Support
 

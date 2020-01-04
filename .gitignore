@@ -3,5 +3,8 @@
 .idea/*
 # Nor do we need venv
 venv/*
+.pyenv/*
 # Nor do we need the sensitive config.ini
 config.ini
+
+dist
