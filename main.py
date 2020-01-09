@@ -53,6 +53,8 @@ DEFAULT_LOG_LEVEL = 'i'
 logging.basicConfig(format=LOG_FORMAT, level=log_levels['i'])
 log = logging.getLogger(__name__)
 
+DEFAULT_SSM_PATH = '/prod/lambda/duo-to-exist/config'
+
 
 def _get_params_from_ssm(path='', decrypt=True, iam_profile=''):
     """
@@ -407,6 +409,13 @@ def parse_args():
                         help="Include this flag if AWS.SSM.ParameterStore should be consulted...."
                         )
 
+    parser.add_argument("--ssm-path",
+                        default=DEFAULT_SSM_PATH,
+                        type=str,
+                        help="The fully qualified path to the SSM Paramater Store that contains the configuration "
+                             "document "
+                        )
+
     parser.add_argument("--iam-profile",
                         default='default',
                         type=str,
@@ -445,41 +454,39 @@ def lambda_entry(event, context):
     else:
         log.setLevel(log_levels[DEFAULT_LOG_LEVEL])
 
+    # Check if the SSM path is set, otherwise use the default
+    _c = {
+        'ssm_path': DEFAULT_SSM_PATH
+    }
+    if 'ssm_path' in event:
+        _c['ssm_path'] = event['ssm_path']
+
     log.info("Jumping into function...")
     # Pass the args obj off to the bulk of the code
-    do_needful(generate_cfg(args))
+    do_needful(generate_cfg(_c))
 
     # Assuming that nothing blew up, exit cleanly :)
     log.info("Exiting...")
     exit(0)
 
 
-def generate_cfg(args=argparse.Namespace()):
+def generate_cfg(args=None):
     """
     Takes Argparse args and, optionally, augments them with values from AWS SSM.ParameterStore.
     The merged object is returned to the caller.
 
-    :param args: Parsed arguments from argparse
-    :return:
+    :param args: Parsed arguments from argparse or a `dict`.
+    :return: `dict` w/ a parsed and merged config
     """
 
     # The CFG object that we'll return to caller
     _cfg = {}
 
-    _ssm_path = '/prod/lambda/duo-to-exist/config'
-
-    # If args is literally the `argparse.Namespace` class, then we know that the caller didn't set anything
-    #   and we can go straight to pulling our configuration from AWS.SSM
-    if args is argparse.Namespace:
-        log.debug("No args provided, pulling config directly from SSM ...")
-
-        ##
-        # When running in lambda, only the path to the SSM store needs to be set; the lambda runtime will already
-        #   (read: automatically) have an IAM profile that can be applied :).
-        ##
-        _do_deep_merge(_cfg, _get_params_from_ssm(path=_ssm_path))
-
-    else:
+    # If args is an instance of the `argparse.Namespace` class, then we know that argparse was invoked and we will
+    #   have command line arguments that we should parse. If args is just a `dict` then it's safe to assume that
+    #   argparse was not involved, but the caller has specified some properties that we should consider when building
+    #   the config object. Currently, only `ssm_path` is supported via dict
+    if isinstance(args, argparse.Namespace):
         log.debug("Args are provided. Parsing...")
 
         # Args have been given so we're probably running local; parse the config file args points us to and add to _cfg
@@ -488,7 +495,21 @@ def generate_cfg(args=argparse.Namespace()):
         # Check if the user has instructed us to use SSM, if they have, use the IAM profile given
         if args.use_ssm is True:
             log.debug("... Fetching SSM")
-            _do_deep_merge(_cfg, _get_params_from_ssm(path=_ssm_path, iam_profile=args.iam_profile))
+            _do_deep_merge(_cfg, _get_params_from_ssm(path=args.ssm_path, iam_profile=args.iam_profile))
+
+    elif type(args) is dict:
+        # Argparse was not used, so assume that caller has set their own SSM path
+        log.debug("Args not from argparse, supporting a minimal config set")
+        ##
+        # When running in lambda, only the path to the SSM store needs to be set; the lambda runtime will already
+        #   (read: automatically) have an IAM profile that can be applied :).
+        ##
+        _do_deep_merge(_cfg, _get_params_from_ssm(path=args['ssm_path']))
+
+    else:
+        _e = "Invalid args. Can't generate a config! got:{}" .format(args)
+        log.fatal(_e)
+        exit(1)
 
     return _cfg
 
