@@ -174,6 +174,8 @@ TL;DR:
 
 ## TODO:
 
+- [ ] Set up github actions to do PEP validation
 - [ ] automate token renewal
 - [ ] Finish Dockerization
 - [ ] Make into a deployable Lambda function
+

@@ -28,7 +28,7 @@ import json
 import collections
 
 # Debugging
-from prettyprinter import pprint  as pp
+from prettyprinter import pprint as pp
 
 ###
 # Begin by configuring logging
@@ -45,6 +45,9 @@ log_levels = {
     # Critical
     'c': 50
 }
+
+# Default log level is INFO
+DEFAULT_LOG_LEVEL = 'i'
 
 # Start with INFO level logging
 logging.basicConfig(format=LOG_FORMAT, level=log_levels['i'])
@@ -145,7 +148,7 @@ def fetch_page(url='', gmt_delta=''):
     }
 
     # The magic cookie needed before we can get working results
-    magic_cookie = 'PHPSESSID'
+    magic_cookie = "PHPSESSID"
 
     # The URL parameters we'll pass along when getting a timezone
     tz_params = (
@@ -231,33 +234,39 @@ def parse_raw(recent, user_tz):
     return sessions
 
 
-def do_needful(cfg={}):
+def do_needful(cfg=None):
     """
     The meet of the script.
 
-    :param args:
+    :param cfg: `dict` object that should look something like this:
+    ```
+        {
+        'duolingo': {
+            'url': 'https://duome.eu/{username}',
+            'username': 'kquinsland',
+            'timezone': 'US/Pacific',
+            'min_xp': '10'
+        },
+        'exist.io': {
+            'tag': 'practice_duolingo',
+            'api_token': '<getYourOwn!>',
+        }
+    }
+    ```
+
     :return:
     """
 
     # First, make sure that we have a valid CFG.
+    if cfg is None:
+        cfg = dict()
     if type(cfg) is not dict or 'exist.io' not in cfg:
         _e = "was given an invalid config file. Got:`{}`".format(cfg)
         log.error(_e)
         exit()
     ##
     # Otherwise, cfg should look like this:
-    # {
-    #     'duolingo': {
-    #         'url': 'https://duome.eu/{username}',
-    #         'username': 'kquinsland',
-    #         'timezone': 'US/Pacific',
-    #         'min_xp': '10'
-    #     },
-    #     'exist.io': {
-    #         'tag': 'practice_duolingo',
-    #         'api_token': '<getYourOwn!>',
-    #     }
-    # }
+
     ##
     _duo_cfg = cfg['duolingo']
     _exist_cfg = cfg['exist.io']
@@ -329,7 +338,7 @@ def _do_exist_tag_update_payload(when, tag=''):
     }
 
 
-def do_exist_tag_update(tags=[], api_token=''):
+def do_exist_tag_update(tags=None, api_token=''):
     """
     Takes a list of tags/dates + API token and then applies them to the account in question.
 
@@ -338,6 +347,8 @@ def do_exist_tag_update(tags=[], api_token=''):
     :return:
     """
 
+    if tags is None:
+        tags = []
     if len(tags) < 1:
         _e = "Can't apply no tags. Got:{}".format(tags)
         log.error(_e)
@@ -376,7 +387,7 @@ def parse_args():
     # Define common args
     # TODO: turn this into more nuanced log level and use logging.getLevelName()
     parser.add_argument("--log-level",
-                        default='i',  # I for info :)
+                        default=DEFAULT_LOG_LEVEL,
                         choices=log_levels.keys(),
                         help="set log level (10 thru 50; 10 being debug 50 being critical)"
                         )
@@ -432,8 +443,7 @@ def lambda_entry(event, context):
     if 'log_level' in event:
         log.setLevel(log_levels[event['log_level']])
     else:
-        # Default log level is INFO
-        log.setLevel(log_levels['i'])
+        log.setLevel(log_levels[DEFAULT_LOG_LEVEL])
 
     log.info("Jumping into function...")
     # Pass the args obj off to the bulk of the code
@@ -444,7 +454,7 @@ def lambda_entry(event, context):
     exit(0)
 
 
-def generate_cfg(args=argparse.Namespace):
+def generate_cfg(args=argparse.Namespace()):
     """
     Takes Argparse args and, optionally, augments them with values from AWS SSM.ParameterStore.
     The merged object is returned to the caller.
