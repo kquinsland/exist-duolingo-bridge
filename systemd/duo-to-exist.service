@@ -1,0 +1,54 @@
+##
+# A very basic service file. Use Podman to run the duo-to-exist bridge
+[Unit]
+Description="Duolingo to Exist.io Bridge"
+Documentation=https://github.com/kquinsland/exist-duolingo-bridge/
+
+# Requires working internet...
+Requires=network-online.target
+After=network-online.target
+
+# Rate limit start (re)attempts
+StartLimitIntervalSec=60
+
+[Service]
+##
+# It's not expected that the conainer will need new privlidges... but just in case, we prevent it from getting them!
+NoNewPrivileges=yes
+
+# And we go out of our way to make sure that the duo-to-exist process can't muck about w/ things on disk
+##
+# Mounts the /usr and /boot /etc directories read-only for processes invoked by this unit
+ProtectSystem=full
+# Directories /home, /root and /run/user are made inaccessible and empty for processes invoked by this unit
+ProtectHome=read-only
+# Keeps /tmp and /dev* to an isolated bare minimum
+PrivateTmp=yes
+# sets up a new /dev mount for the executed processes and only adds API pseudo devices such as /dev/null, /dev/zero or /dev/random
+#   No physical devices such as /dev/sda, system memory /dev/mem
+PrivateDevices=yes
+
+# TODO: get path on host.. once it's setup
+ExecStart=/path/to/podman
+Restart=on-failure
+
+RestartSec=30
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
+
+## Useful debugging commands
+# show the unit file
+#   systemctl cat duo-to-exist.service
+# disable the service
+#   systemctl disable duo-to-exist.service
+# reload the changes
+#   systemctl daemon-reload
+# enable the service
+#   systemctl enable duo-to-exist.service
+# edit the unit file
+#   systemctl enable duo-to-exist.service
+##
+# Useful all in one for testing: (usedul to have journalctl -xfe -u duo-to-exist.service running in 2nd window...)
+#   service duo-to-exist stop; nano /etc/systemd/system/duo-to-exist.service; systemctl daemon-reload; service duo-to-exist start
