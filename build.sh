@@ -10,4 +10,3 @@ else
 fi
 
 echo "Building complete. Run: docker run --rm -it duo-to-exist"
-
