@@ -24,9 +24,11 @@ from pytz import timezone
 # Exist.io API is JSON, requires that we send JSON data to it...
 import json
 
+# Used for deep-merge of config docs
+import collections
+
 # Debugging
 from prettyprinter import pprint  as pp
-
 
 ###
 # Begin by configuring logging
@@ -40,7 +42,7 @@ log_levels = {
     # Warning
     'w': 30,
     'e': 40,
-    # Crit
+    # Critical
     'c': 50
 }
 
@@ -48,27 +50,49 @@ log_levels = {
 logging.basicConfig(format=LOG_FORMAT, level=log_levels['i'])
 log = logging.getLogger(__name__)
 
-def get_params_from_ssm(param_name):
+
+def _get_params_from_ssm(path='', decrypt=True, iam_profile=''):
+    """
+    Attempts to get the exist.io API token from Amazon Simple Systems Manager (ssm)
+    See: https://github.com/aws/amazon-ssm-agent
+
+    :param path:    The full path/name to the parameter that we're to fetch
+    :param decrypt: Bool toggle; should the parameter at `path` be decrypted?
+    :param iam_profile: String. If set, will be used to configure the iam profile that the ssm client will use
+
+    :return:
+    """
+
     import boto3
-    client = boto3.client('ssm')
+    if iam_profile is not '':
+        log.debug("creating boto session with iam_profile:{}".format(iam_profile))
+        session = boto3.Session(profile_name=iam_profile)
+    else:
+        session = boto3.Session()
+
+    # Get a SSM client using the session
+    client = session.client('ssm')
+
     try:
-        ssm_param_response = client.get_parameter(
-            Name=param_name,
-            WithDecryption=True
-        )
-        
-        raw_params = ssm_param_response['Parameter']['Value']
-        return json.loads(raw_params) or {}
+        log.debug("Fetching Parameters from ssm:{} ...".format(path))
+        ssm_param_response = client.get_parameter(Name=path, WithDecryption=decrypt)
+
+        log.debug("got ssm data, last updated:{}".format(ssm_param_response['Parameter']['LastModifiedDate']))
+
+        # Return False to indicate that there was an error pulling the params that we expected
+        return json.loads(ssm_param_response['Parameter']['Value']) or False
+
     except Exception as e:
-        print(e)
+        _e = "Something broke while trying to pull values from SSM. e:{}".format(e)
+        log.error(_e)
         raise e
-    
+
 
 def _parse_cfg(cfg_file=''):
     """
     Validates file and returns an object representing the parsed content of the file
-    :param cfg_file:
-    :return:
+    :param cfg_file: The path to the cfg file we're to validate and parse
+    :return: A `dict` representing the parsed config file
     """
     if not os.path.isfile(cfg_file):
         _e = "The config file {} can't be accessed. Does it exist and have correct permissions?".format(cfg_file)
@@ -77,22 +101,27 @@ def _parse_cfg(cfg_file=''):
 
     log.debug("Parsing config from {}...".format(cfg_file))
 
+    # Stand up config parser and point it @ the file...
     cfg = configparser.ConfigParser()
     cfg.read(cfg_file)
+
+    # Turn the entire parsed document into a dict and return to the caller
+    # Thanks to this uber elegant solution: https://stackoverflow.com/a/28990982/1521764
+    cfg = {s: dict(cfg.items(s)) for s in cfg.sections()}
     return cfg
-    
+
 
 def fetch_page(url='', gmt_delta=''):
     """
     Takes a URL and a Timezone. Gets a session cookie, associates a timezone w/ the session
     and then uses the session to request user data
 
-    :param url:
-    :param timezone:
+    :param url: The URL of the page to fetch.
+    :param gmt_delta:
     :return:
     """
 
-    log.debug("Fetching url:{} gmt_delta:{}".format(url,gmt_delta))
+    log.debug("Fetching url:{} gmt_delta:{}".format(url, gmt_delta))
 
     # We pretend to be a chrome browser...
     initial_headers = {
@@ -100,19 +129,21 @@ def fetch_page(url='', gmt_delta=''):
         'pragma': 'no-cache',
         'cache-control': 'no-cache',
         'upgrade-insecure-requests': '1',
-        'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36',
-        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3',
+        'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_2) AppleWebKit/537.36 (KHTML, like Gecko) '
+                      'Chrome/78.0.3904.108 Safari/537.36',
+
+        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,'
+                  'application/signed-exchange;v=b3',
         'sec-fetch-site': 'same-origin',
         'sec-fetch-mode': 'navigate',
         'accept-encoding': 'gzip, deflate, br',
         'accept-language': 'en-US,en;q=0.9',
     }
 
-
     # The magic cookie needed before we can get working results
-    magic_cookie='PHPSESSID'
+    magic_cookie = 'PHPSESSID'
 
-    # The URL parameters we'll pass along when getting a timezone..
+    # The URL parameters we'll pass along when getting a timezone
     tz_params = (
         # We will get a timedelta like -0800 to indicate that we  are -08 hours and 00 min behind GMT
         #   but the duome API will see -0800 as LITERALLY 800 hours behind GMT. Not ideal!
@@ -196,82 +227,90 @@ def parse_raw(recent, user_tz):
     return sessions
 
 
-def do_needful(args):
+def do_needful(cfg={}):
     """
     The meet of the script.
 
     :param args:
     :return:
     """
-    log.debug("Alive!")
 
-    # Open the config file
-    if 'ssm_parameter_name' in args and args['ssm_parameter_name']:
-        cfg = get_params_from_ssm(args['ssm_parameter_name'])
-    elif 'config_file' in args and args['config_file']:
-        cfg = _parse_cfg(args['config_file'])
-    else:
-        _e = "No Config file or ssm parameter name provided!"
-        log.fatal(_e)
-        raise Exception(_e)
+    # First, make sure that we have a valid CFG.
+    if type(cfg) is not dict or 'exist.io' not in cfg:
+        _e = "was given an invalid config file. Got:`{}`".format(cfg)
+        log.error(_e)
+        exit()
+    ##
+    # Otherwise, cfg should look like this:
+    # {
+    #     'duolingo': {
+    #         'url': 'https://duome.eu/{username}',
+    #         'username': 'kquinsland',
+    #         'timezone': 'US/Pacific',
+    #         'min_xp': '10'
+    #     },
+    #     'exist.io': {
+    #         'tag': 'practice_duolingo',
+    #         'api_token': '<getYourOwn!>',
+    #     }
+    # }
+    ##
+    _duo_cfg = cfg['duolingo']
+    _exist_cfg = cfg['exist.io']
 
-
-    # Get the duo section from  cfg parser
-    duo_cfg = dict(cfg['duolingo'].items())
-    exist_cfg = dict(cfg['exist.io'].items())
-
-    # From the duo config, we need the min_xp and user time zone
-    min_xp = int(duo_cfg['min_xp'])
-    user_tz = timezone(duo_cfg['timezone'])
-
-    # With the time zone, figure out it's +/- from GMT
-    _now = datetime.datetime.now(user_tz)
+    # Localize now() to user time zone, then figure out how far it is from GMT.
+    _now = datetime.datetime.now()
+    _user_tz = timezone(_duo_cfg['timezone'])
+    _now = _user_tz.localize(_now)
     _offset = _now.strftime('%z')
 
-    # Build a url from the user name
-    url = duo_cfg['url'].format(username=duo_cfg['username'])
+    log.debug("_now:{}".format(_now))
+    log.debug("_offset:{}".format(_offset))
 
-    # Pass the URL to fetcher; include time zone so service knows how to localize  data for us... (REQUIRED!)
-    soup = fetch_page(url=url, gmt_delta=_offset)
+    # Build a url from the user name
+    _url = _duo_cfg['url'].format(username=_duo_cfg['username'])
+
+    # Pass the URL to fetcher; include time zone so service knows how to localize data for us... (REQUIRED!)
+    soup = fetch_page(url=_url, gmt_delta=_offset)
 
     # The raw data that we care about is located in
     #   <div class="hidden" id="raw">
     # This will be a series of 5 <li> elements, each with the most recent date + the XP level
-    raw = soup.find('div', {'class': 'hidden', 'id':'raw'})
+    raw = soup.find('div', {'class': 'hidden', 'id': 'raw'})
 
     # From the RAW object, pull the list items
-    recent = raw.find_all('li')
+    _recent = raw.find_all('li')
 
     # Pass the list items off to be processed; get back localized date/time + EXP tuples
-    sessions = parse_raw(recent, user_tz)
+    sessions = parse_raw(_recent, _user_tz)
 
     # The Exist API supports batching, thankfully.
     tags = []
 
-    # Now, go through each session to figure out if the user earned enough XP
+    # Now, go through each session to figure out if the user earned enough XP on that day
     days = {}
     for record in sessions:
         _x = sessions[record]
         _day = record.strftime('%Y-%m-%d')
         days.setdefault(_day, 0)
         days[_day] += _x
-    
-    for day, xp in days.items():
-        if xp >= min_xp:
-            log.info("on {}, you managed to practice enough ({} XPs)!".format(day, xp))
-            tags.append(_do_exist_tag_update_payload(day, tag=exist_cfg['tag']))
 
-    # At this point, we should have an arrayof objexts.
+    # Now that we have a cumulative XP per day, see if sum is above our threshold
+    for day, xp in days.items():
+        if xp >= int(_duo_cfg['min_xp']):
+            log.info("on {}, you managed to practice enough ({} XPs)!".format(day, xp))
+            tags.append(_do_exist_tag_update_payload(day, tag=_exist_cfg['tag']))
+
+    # At this point, we should have an array of objects.
     log.debug("Applying tag to {} days".format(len(tags)))
-    do_exist_tag_update(tags, api_token=exist_cfg['api_token'])
-    return days
+    do_exist_tag_update(tags, api_token=_exist_cfg['api_token'])
 
 
 def _do_exist_tag_update_payload(when, tag=''):
     """
     generates an exist.io API payload to apply a tag to a date
-    :param tag:
-    :param date:
+    :param when: A datetime object representing when the `tag` is meant to be applied
+    :param tag: a `str`; the tag to be applied to `when`
     :return:
     """
 
@@ -290,8 +329,8 @@ def do_exist_tag_update(tags=[], api_token=''):
     """
     Takes a list of tags/dates + API token and then applies them to the account in question.
 
-    :param tag:
-    :param date:
+    :param tags: List of tags+dates to apply to a given exist account
+    :param api_token: The API token for the exist account in question
     :return:
     """
 
@@ -303,7 +342,6 @@ def do_exist_tag_update(tags=[], api_token=''):
     # TODO: validate API token
     log.info("Batching {} tags for update".format(len(tags)))
 
-    # TODO: perhaps add support for KMS when deployed to  lambda?
     headers = {
         'content-type': 'application/json',
         'authorization': "Bearer {}".format(api_token)
@@ -321,13 +359,14 @@ def parse_args():
     """
     This script does very little, so there's not much to configure. Additionally, what can be configured
         is likely not going to change often so it's best to just leave things in a config file.
+
     :return:
     """
 
     # Root argparse
     parser = argparse.ArgumentParser(
-        description = 'Syncs duolingo to Exist.io',
-        epilog = 'Thats how you get ants!',
+        description='Syncs duolingo to Exist.io',
+        epilog="That's how you get ants!",
         allow_abbrev=False)
 
     # Define common args
@@ -348,37 +387,151 @@ def parse_args():
                         help="Path to controller config file"
                         )
 
+    parser.add_argument("--use-ssm",
+                        action='store_true',
+                        help="Include this flag if AWS.SSM.ParameterStore should be consulted...."
+                        )
+
+    parser.add_argument("--iam-profile",
+                        default='default',
+                        type=str,
+                        help="The name of the IAM credential profile to use when communicating with SSM; has no effect"
+                             " if --use-ssm is not set"
+                        )
 
     return parser.parse_args()
 
-def perform(args):
-    # Adjust log level
-    log.info("Alive. Adjusting log level to {}..".format(args['log_level']))
-    log.setLevel(log_levels[args['log_level']])
 
-    # Pass the args obj off to the bulk of the code
-    return do_needful(args=args)
+def lambda_entry(event, context):
+    """
+    The entry point for AWS Lambda invocation. Does basic parameter collection / validation before invoking the
+    do_needful()
 
-def deploy_doulingo_activity_to_exist_io(message, _context):
-    message = {
-        'config_file': None,
-        'log_level': 'i',
-        'ssm_parameter_name': None,
-        **message
-    }
-    print(message)
-    return {
-        "statusCode": 200,
-        "body": perform(message)
-    }
+    :param event: The object that AWS Lambda will use to pass event data to the function.
+    This parameter is usually of the Python dict type. It can also be list, str, int, float, or NoneType type.
+    When you invoke your function, you determine the content and structure of the event.
+    When an AWS service invokes your function, the event structure varies by service.
+
+    See: https://docs.aws.amazon.com/lambda/latest/dg//python-programming-model-handler-types.html
+
+
+    :param context: AWS Lambda uses this parameter to provide runtime information to your handler.
+    (memory limits, ARNs... etc)
+    See: https://docs.aws.amazon.com/lambda/latest/dg//python-context-object.html
+
+
+    :return:
+    """
+    log.debug("Alive!")
+
+    # Parse the config file, if we can
+    cfg = _parse_cfg(args['config_file'])
+    # Then pull everything from SSM/Parameter Store, if we can.
+    # Then merge the two.
+    # Then pass the merged config object into the main function
+
+    # Open the config file
+    if 'ssm_parameter_name' in args and args['ssm_parameter_name']:
+        cfg = get_params_from_ssm(args['ssm_parameter_name'])
+    elif 'config_file' in args and args['config_file']:
+        cfg = _parse_cfg(args['config_file'])
+    else:
+        _e = "No Config file or ssm parameter name provided!"
+        log.fatal(_e)
+        raise Exception(_e)
+
+    # Get the duo section from  cfg parser
+    duo_cfg = dict(cfg['duolingo'].items())
+    exist_cfg = dict(cfg['exist.io'].items())
+
+    # From the duo config, we need the min_xp and user time zone
+    min_xp = int(duo_cfg['min_xp'])
+    user_tz = timezone(duo_cfg['timezone'])
+
+
+def generate_cfg(args=argparse.Namespace):
+    """
+    Takes Argparse args and, optionally, augments them with values from AWS SSM.ParameterStore.
+    The merged object is returned to the caller.
+
+    :param args: Parsed arguments from argparse
+    :return:
+    """
+
+    # The CFG object that we'll return to caller
+    _cfg = {}
+
+    _ssm_path = '/prod/lambda/duo-to-exist/config'
+
+    # If args is literally the `argparse.Namespace` class, then we know that the caller didn't set anything
+    #   and we can go straight to pulling our configuration from AWS.SSM
+    if args is argparse.Namespace:
+        log.debug("No args provided, pulling config directly from SSM ...")
+
+        ##
+        # When running in lambda, only the path to the SSM store needs to be set; the lambda runtime will already
+        #   (read: automatically) have an IAM profile that can be applied :).
+        ##
+        _do_deep_merge(_cfg, _get_params_from_ssm(path=_ssm_path))
+
+    else:
+        log.debug("Args are provided. Parsing...")
+
+        # Args have been given so we're probably running local; parse the config file args points us to and add to _cfg
+        _cfg.update(_parse_cfg(args.config_file))
+
+        # Check if the user has instructed us to use SSM, if they have, use the IAM profile given
+        if args.use_ssm is True:
+            log.debug("... Fetching SSM")
+            _do_deep_merge(_cfg, _get_params_from_ssm(path=_ssm_path, iam_profile=args.iam_profile))
+
+
+    return _cfg
+
+
+def _do_deep_merge(dct, merge_dct):
+    """
+    Recursive dict merge. Inspired by :meth:``dict.update()``, instead of updating only top-level keys,
+    dict_merge recurses down into dicts nested to an arbitrary depth, updating keys.
+    The ``merge_dct`` is merged into ``dct``.
+
+    Seamlessly stolen from https://gist.github.com/angstwad/bf22d1822c38a92ec0a9
+    Credit goes to Copyright (C) 2016 Paul Durivage <pauldurivage+github@gmail.com>
+
+    I only made it python 3.7+ compatible...
+
+    :param dct: dict onto which the merge is executed
+    :param merge_dct: dct merged into dct
+    :return: None
+
+
+    """
+    for k, v in merge_dct.items():
+        if (k in dct and isinstance(dct[k], dict)
+                and isinstance(merge_dct[k], collections.abc.Mapping)):
+            _do_deep_merge(dct[k], merge_dct[k])
+        else:
+            dct[k] = merge_dct[k]
+
 
 if __name__ == "__main__":
+    """
+    This script is intended for deployment either in a serverless context (read; aws/lambda) or in a local/cron context
+    WHen invoked via regular CLI, this is our entry point.
+    
+    Parse the passed commandline args, set the log level as instructed, and then enter the main function.  
+    """
     # Let the world know we're alive and then begin  parsing args
     log.debug("Alive! Parsing args...")
     args = parse_args()
-    
-    perform(vars(args))
 
-    # Assuming that nothing bklew up, exit cleanly :)
+    # Adjust log level
+    log.info("Alive. Adjusting log level to {}..".format(args.log_level))
+    log.setLevel(log_levels[args.log_level])
+
+    # Pass the args obj off to the bulk of the code
+    do_needful(generate_cfg(args))
+
+    # Assuming that nothing blew up, exit cleanly :)
     log.info("Exiting...")
-    os._exit(0)
+    exit(0)

@@ -10,3 +10,6 @@ bs4
 
 # Timezone shift/localization
 pytz
+
+# For deployments in AWS/Lambda
+boto3
