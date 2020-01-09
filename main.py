@@ -53,7 +53,8 @@ log = logging.getLogger(__name__)
 
 def _get_params_from_ssm(path='', decrypt=True, iam_profile=''):
     """
-    Attempts to get the exist.io API token from Amazon Simple Systems Manager (ssm)
+    Attempts to get the document that `path` points to from Amazon Simple Systems Manager (ssm).
+    If configured, the IAM profile is also used.
     See: https://github.com/aws/amazon-ssm-agent
 
     :param path:    The full path/name to the parameter that we're to fetch
@@ -66,6 +67,9 @@ def _get_params_from_ssm(path='', decrypt=True, iam_profile=''):
     import boto3
     if iam_profile is not '':
         log.debug("creating boto session with iam_profile:{}".format(iam_profile))
+        # Note: You should never use AWS API keys unless you have to. And if you must use API keys, then you should
+        #   NEVER hard code them. This tool will not allow you to use API keys, so there's no risk of hard-coding ;)
+        #   Should you want to create a hard-fork, though, this is where you'd want to hard-code in your AWS API keys.
         session = boto3.Session(profile_name=iam_profile)
     else:
         session = boto3.Session()
@@ -424,29 +428,20 @@ def lambda_entry(event, context):
     """
     log.debug("Alive!")
 
-    # Parse the config file, if we can
-    cfg = _parse_cfg(args['config_file'])
-    # Then pull everything from SSM/Parameter Store, if we can.
-    # Then merge the two.
-    # Then pass the merged config object into the main function
-
-    # Open the config file
-    if 'ssm_parameter_name' in args and args['ssm_parameter_name']:
-        cfg = get_params_from_ssm(args['ssm_parameter_name'])
-    elif 'config_file' in args and args['config_file']:
-        cfg = _parse_cfg(args['config_file'])
+    # Adjust log level, if set
+    if 'log_level' in event:
+        log.setLevel(log_levels[event['log_level']])
     else:
-        _e = "No Config file or ssm parameter name provided!"
-        log.fatal(_e)
-        raise Exception(_e)
+        # Default log level is INFO
+        log.setLevel(log_levels['i'])
 
-    # Get the duo section from  cfg parser
-    duo_cfg = dict(cfg['duolingo'].items())
-    exist_cfg = dict(cfg['exist.io'].items())
+    log.info("Jumping into function...")
+    # Pass the args obj off to the bulk of the code
+    do_needful(generate_cfg(args))
 
-    # From the duo config, we need the min_xp and user time zone
-    min_xp = int(duo_cfg['min_xp'])
-    user_tz = timezone(duo_cfg['timezone'])
+    # Assuming that nothing blew up, exit cleanly :)
+    log.info("Exiting...")
+    exit(0)
 
 
 def generate_cfg(args=argparse.Namespace):
@@ -484,7 +479,6 @@ def generate_cfg(args=argparse.Namespace):
         if args.use_ssm is True:
             log.debug("... Fetching SSM")
             _do_deep_merge(_cfg, _get_params_from_ssm(path=_ssm_path, iam_profile=args.iam_profile))
-
 
     return _cfg
 
