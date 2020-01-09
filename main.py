@@ -70,7 +70,7 @@ def _get_params_from_ssm(path='', decrypt=True, iam_profile=''):
     """
 
     import boto3
-    if iam_profile is not '':
+    if iam_profile != '':
         log.debug("creating boto session with iam_profile:{}".format(iam_profile))
         # Note: You should never use AWS API keys unless you have to. And if you must use API keys, then you should
         #   NEVER hard code them. This tool will not allow you to use API keys, so there's no risk of hard-coding ;)
