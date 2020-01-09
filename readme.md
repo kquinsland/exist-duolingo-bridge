@@ -55,7 +55,7 @@ $ source venv/bin/activate
 $ pip3 install -r requirements.txt
 ```
 
-The tool is quite simple as it only does one thing.  The few command line flags that this tool does support
+The tool is quite simple as it only does one thing. The few command line flags that this tool does support
 are all pretty reasonable defaults so it's unlikely that you'll need to adjust them. But, if you  do, the `--help` flag
 should give you an idea of what you can tweak and how.
 
@@ -78,10 +78,20 @@ bash-5.0$ source venv/bin/activate
 
 ```
 
-You can use any of your favorite tools to schedule the script. There's no need to run more than once a day, but you can 
-also run it every 5 days that you practice Duolingo. This is because the duo.me service returns the last 5 days that
-a user has EXP for. In any event, the script - when combined with a virtual-env - is standalone and should be very 
-easy to  get working with your favorite schedule tool.
+## Scheduling
+
+You can use any of your favorite tools to schedule the script.
+
+ Due to a limitation w/ the duo.me service, you should run this script *at least* every 7 days that you use 
+Duolingo as 7 is the maximum number of days that I can retrieve for a user. 
+
+You do not need to run the script more than once in a 24 hour period.
+
+If you decide to use [AWS Lambda](https://aws.amazon.com/lambda/) to host the function, then be mindful of the 
+free-tier limits. Currently, they are [1 Million free lambda invocations/month](https://aws.amazon.com/lambda/pricing/) and interacting with the Parameter Store
+is only [$0.05 per 10,000 requests](https://aws.amazon.com/systems-manager/pricing/). 
+
+This may change - without warning from me - at any time, though! 
 
 
 **Note**: The exist.io API token will expire in 1 year. I strongly suggest making a reminder or calendar entry so you
@@ -89,11 +99,18 @@ renew the API token before it stops working!
 
 ## Deployment on AWS Lambda
 
-After succesfully running locally, you can deploy the function as an AWS Lambda.
-(Will hopefully add a package & deploy script to facilitate this process in the future)
+This script can be run locally or on AWS Lambda. As of right now, you'll need to package up the script and it's 
+dependencies for deployment. When running on lambda, the command-line arguments are not parsed, so `--config-file` 
+can't be used to point to a config file in your deployment package. You will need to create a JSON equivalent
+of `config.ini` and store that in the 
+[AWS SSM Parameter Store](https://docs.aws.amazon.com/systems-manager/latest/userguide/systems-manager-parameter-store.html).
 
-You'll need:
-1. Have an SSM secure parameter with the same structure of the config.ini (converted to json). Should look like this:
+
+
+1. [Create](https://docs.aws.amazon.com/systems-manager/latest/userguide/param-create-console.html) a **secure** parameter.
+The path can be any fully-qualified path you'd like or use the default path as explained below.
+
+The document that you save to the secure parameter store should look something like this: 
 
 ```
 {
@@ -110,6 +127,8 @@ You'll need:
 }
 ```
 
+You can tag the parameter however you'd like.
+
 2. Zip your pip packages (from your python env folder) together with main.py (all in the same folder level), e.g.:
 
 ```
@@ -119,16 +138,40 @@ package.zip:
   another_package_folder/
 ```
 
-3. Deploy the Lambda to your AWS account. It can have 128MB, timeout of ~15 seconds. You need to add an IAM Policy to the Execution Role to enable access to the ssm parameter. Also create a Test event with overrides to the command line arguments + provide a `ssm_parameter_name`. Should look like:
+3. Deploy the Lambda to your AWS account. Use the latest Python version for your runtime selection. 128MB of memory
+and ~15 seconds should be plenty. You will need to add an [IAM Policy](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html) 
+to the [Execution Role](https://docs.aws.amazon.com/lambda/latest/dg/lambda-intro-execution-role.html) to permit
+the lambda function to access the ssm parameter. 
+
+4. Add a [Scheduled CloudWatch Event](https://docs.aws.amazon.com/AmazonCloudWatch/latest/events/Create-CloudWatch-Events-Scheduled-Rule.html)
+to execute the function on some regular interval. Suggested intervals in the Scheduling section.
+
+
+
+#### Lambda Configuration
+
+Sane default were chosen, but should you need to change  either the log-level or the path to the config document in ssm
+you can create a [Test Event](https://aws.amazon.com/blogs/compute/improved-testing-on-the-aws-lambda-console/) to 
+specify preferred values. The JSON you provide to a schedule cloud watch event will be identical to the JSON you provide
+for a test event.
+
+| Setting     | Default                              | Description                                                                                                            |
+|-------------|--------------------------------------|------------------------------------------------------------------------------------------------------------------------|
+| `log_level` | `"i"`                                | Adjust the severity threshold for log info. See the `log_levels` dict in `main.py`                                     |
+| `ssm_path`  | `"/prod/lambda/duo-to-exist/config"` | The fully qualified path to the SSM Parameter where the config document is stored. See `DEFAULT_SSM_PATH` in `main.py` |
+|             |                                      |                                                                                                                        |
+
+ 
+Your test event should look like:
 
 ```
 {
-  "ssm_parameter_name": "your-ssm-param-name",
+  "ssm_path": "your-ssm-param-name",
   "log_level": "d"
 }
 ```
 
-4. Add a Cloudwatch Rule to execute the function regularly with a schedule (Preferably once a day or 5 days). Put similar json like you put in the Test Event (in step 3) as the input.
+
 
 ## Support
 
@@ -152,7 +195,7 @@ Issues that are [well written](https://stackoverflow.com/help/how-to-ask) and
 [productive](https://www.youtube.com/watch?v=53zkBvL4ZB4) will probably earn some sympathy, depending on how much free
 time I have.
 
-For the capable, pull requests are welcome!
+For the capable, pull requests are welcome! Please try to adhere to PEP standards!
 
 
 ## License
@@ -167,15 +210,12 @@ Likewise, I can't be held responsible for what this code does to you or your com
 TL;DR:
 
 [![works badge](https://cdn.jsdelivr.net/gh/nikku/works-on-my-machine@v0.2.0/badge.svg)](https://github.com/nikku/works-on-my-machine)
- 
-  
- 
 
 
 ## TODO:
 
 - [ ] Set up github actions to do PEP validation
-- [ ] automate token renewal
+- [ ] automate token renewal. 
 - [ ] Finish Dockerization
-- [ ] Make into a deployable Lambda function
+- [ ] Make into a deployable Lambda function (provide sample terraform + IAM Policy for SSM)
 
