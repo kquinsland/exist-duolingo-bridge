@@ -13,7 +13,7 @@ jobs:
       # Note the env-vars
       # See: https://help.github.com/en/actions/automating-your-workflow-with-github-actions/using-environment-variables#default-environment-variables
       - name: Build and tag image
-        run: docker build -t "docker.pkg.github.com/$GITHUB_REPOSITORY/duolingo-to-exist-bridge:latest" --build-arg GIT_COMMIT=$GITHUB_SHA --build-arg GIT_BRANCH=$GITHUB_REF -f Dockerfile
+        run: docker build --build-arg GIT_COMMIT=$GITHUB_SHA --build-arg GIT_BRANCH=$GITHUB_REF --tag "docker.pkg.github.com/$GITHUB_REPOSITORY/duolingo-to-exist-bridge:latest" --file Dockerfile
         env:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
 
