@@ -217,5 +217,4 @@ TL;DR:
 - [ ] Set up github actions to do PEP validation
 - [ ] Set up github actions to create lambda ready ZIP file
 - [ ] automate token renewal.
-- [ ] Finish Dockerization (incl systemd service + timer)
 - [ ] Make into a deployable Lambda function (provide sample terraform + IAM Policy for SSM)
