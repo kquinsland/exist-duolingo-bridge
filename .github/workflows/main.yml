@@ -1,0 +1,29 @@
+name: Build Container Image On Push
+
+on: [push]
+
+jobs:
+  build_container_image:
+    runs-on: ubuntu-latest
+    steps:
+      # Pull the code onto the build host
+      - uses: actions/checkout@v1
+  
+      # Build the image
+      # Note the env-vars.
+      # See: https://help.github.com/en/actions/automating-your-workflow-with-github-actions/using-environment-variables#default-environment-variables
+      - name: Build and tag image
+        run: docker build -t "docker.pkg.github.com/$GITHUB_REPOSITORY/duolingo-to-exist-bridge:latest" -f Dockerfile
+
+      - name: GPR Auth
+      # Authenticate to Github Packages Repo
+        run: docker login docker.pkg.github.com -u $GITHUB_ACTOR -p $GITHUB_TOKEN
+        env:
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+
+      - name: GPR Push
+        # And attempt to push to github packages
+        run: docker push "docker.pkg.github.com/$GITHUB_REPOSITORY/duolingo-to-exist-bridge:latest"
+  
+  
+  
