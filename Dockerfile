@@ -16,8 +16,7 @@ WORKDIR /duo-to-exist
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy in the code + config
-COPY config.ini .
+# Copy in the code
 COPY main.py .
 
 # Apply labels
