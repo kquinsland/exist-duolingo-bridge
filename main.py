@@ -409,7 +409,7 @@ def parse_args():
 
     # Config File Location
     parser.add_argument("--config-file",
-                        default='./config.ini',
+                        default='./config/config.ini',
                         type=str,
                         help="Path to controller config file"
                         )
