@@ -11,7 +11,7 @@ jobs:
     steps:
       # Pull the code onto the build host
       - uses: actions/checkout@v1
-  
+
       # Build the image
       # Note the env-vars
       # See: https://help.github.com/en/actions/automating-your-workflow-with-github-actions/using-environment-variables#default-environment-variables
@@ -21,7 +21,7 @@ jobs:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
 
       - name: GPR Auth
-      # Authenticate to Github Packages Repo
+        # Authenticate to Github Packages Repo
         run: docker login docker.pkg.github.com -u $GITHUB_ACTOR -p $GITHUB_TOKEN
         env:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
@@ -29,6 +29,11 @@ jobs:
       - name: GPR Push
         # And attempt to push to github packages
         run: docker push "docker.pkg.github.com/$GITHUB_REPOSITORY/duolingo-to-exist-bridge:latest"
-  
-  
-  
+
+      - name: Push to Docker Hub
+        uses: docker/build-push-action@v1.1.0
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PERSONAL_TOKEN }}
+          repository: kquinsland/exist-duolingo-bridge
+          tags: latest
