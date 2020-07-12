@@ -35,4 +35,4 @@ LABEL description="Dullingo to Exist.io sync tool"
 ENTRYPOINT [ "python", "./main.py" ]
 
 # Set labels
-LABEL Author="karl@karlquinsland.com" Description="Duo2Exist" Version=${VERSION_STRING}
+LABEL Author="karl@karlquinsland.com" Description="Duo2Exist"
