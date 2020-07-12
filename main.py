@@ -206,6 +206,11 @@ def parse_raw(recent, user_tz):
         #
         # So just split on the `·` character, trim and done!
         _raw_line = session.text
+
+        # Skip empty lines
+        if _raw_line == "":
+            continue
+
         _tokens = _raw_line.split("·")
 
         # Check that we have the correct number of tokens, otherwise  emit a warning and try parsing the next one...
@@ -228,8 +233,13 @@ def parse_raw(recent, user_tz):
         # _when will be in format `2019-12-12 16:11:48` local to  user
         _when = datetime.datetime.strptime(_when, '%Y-%m-%d %H:%M:%S')
         _when = user_tz.localize(_when)
-        # remove whitespace, drop the XP and turn into INT
-        _xp = int(_tokens[1].strip().replace('XP', ''))
+
+        # In some cases, the secnod token will be in the format of '14XP stories / timed practice' so we must
+        #   split *again* on 'XP'
+        ##
+        _xp = _tokens[1].split('XP')[0].strip()
+        _xp = int(_xp)
+
         log.debug("earned {xp} on {dt}".format(xp=_xp, dt=_when))
         sessions[_when] = _xp
 
