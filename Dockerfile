@@ -11,8 +11,8 @@ ARG GIT_BRANCH="NotDefined"
 ARG GIT_COMMIT="NotDefined"
 
 # Make space for script
-RUN mkdir /duo-to-exist
-WORKDIR /duo-to-exist
+RUN mkdir /duo-to-exist.io
+WORKDIR /duo-to-exist.io
 
 # Copy over requirements, install them
 COPY requirements.txt ./
@@ -35,4 +35,4 @@ LABEL description="Dullingo to Exist.io sync tool"
 ENTRYPOINT [ "python", "./main.py" ]
 
 # Set labels
-LABEL Author="karl@karlquinsland.com" Description="Duo2Exist"
+LABEL Author="karl@karlquinsland.com" Description="Duo2Exist" Version=${VERSION_STRING}
