@@ -1,6 +1,8 @@
+# See: https://hub.docker.com/_/python
+# See: https://github.com/docker-library/python/blob/ece154e2849e78c383419d0be591cfd332a471d3/3.8/alpine3.12/Dockerfile
 ##
-# See: https://hub.docker.com/_/python?tab=tags
-FROM python:3.8.1-alpine
+ARG PYTHON_VERSION=3-alpine
+FROM python:${PYTHON_VERSION} as base
 
 ##
 # Arguments that should get passed to build-tool:
@@ -31,3 +33,6 @@ LABEL description="Dullingo to Exist.io sync tool"
 # We set the entrypoint to be the main.py which will still allow for users to pass in additional arguments on the
 #   command line or via CMD
 ENTRYPOINT [ "python", "./main.py" ]
+
+# Set labels
+LABEL Author="karl@karlquinsland.com" Description="Duo2Exist"
