@@ -10,7 +10,7 @@ import configparser
 # Duh
 import logging
 
-# For proper exit()
+# File/patch checking, env-var access
 import os
 
 # for scraping the page
@@ -328,7 +328,11 @@ def do_needful(cfg=None):
 
     # At this point, we should have an array of objects.
     log.debug("Applying tag to {} days".format(len(tags)))
-    do_exist_tag_update(tags, api_token=_exist_cfg['api_token'])
+    try:
+        do_exist_tag_update(tags, api_token=_exist_cfg['api_token'])
+    except Exception as e:
+        log.error("Unable to update exist.io. error: {}".format(e))
+        exit(1)
 
 
 def _do_exist_tag_update_payload(when, tag=''):
@@ -506,6 +510,18 @@ def generate_cfg(args=None):
         if args.use_ssm is True:
             log.debug("... Fetching SSM")
             _do_deep_merge(_cfg, _get_params_from_ssm(path=args.ssm_path, iam_profile=args.iam_profile))
+
+        # Check if `api_token` is commented out *or* empty. If yes, load `D2E_API_TOKEN`
+        log.debug("parse api_token...")
+        if 'api_token' not in _cfg['exist.io']:
+            _cfg['exist.io']['api_token'] = os.environ.get('D2E_API_TOKEN')
+        elif  _cfg['exist.io']['api_token'] == '':
+            _cfg['exist.io']['api_token'] = os.environ.get('D2E_API_TOKEN')
+
+        # In any event, we _should_ have a non None value for _cfg['exist.io']['api_token']. Ensure this is the case!
+        if _cfg['exist.io']['api_token'] is None:
+            log.error("Didn't get a valid api_token. Check your config.ini and env-vars")
+            exit(1)
 
     elif type(args) is dict:
         # Argparse was not used, so assume that caller has set their own SSM path
