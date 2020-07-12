@@ -3,7 +3,9 @@ name: Build Container Image On Push
 on:
   push:
     paths:
+      # Build and push any time Dockerfile is updated *or* main.py
       - "Dockerfile"
+      - "main.py"
 
 jobs:
   build_container_image:
